@@ -1,2 +1,2 @@
-# Patient-tracking-reporting-system-
+# Patient-tracking-reporting-system
 Patient tracking and management system
