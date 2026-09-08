@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Patient Tracking and Reporting System — backend
 
 Built from the DSD AHF Contribution Monthly Report + Clinicians' Index
@@ -167,3 +168,7 @@ npx prisma migrate dev --name init
 npx prisma db seed
 npm run start:dev
 ```
+=======
+# Patient-tracking-reporting-system
+Patient tracking and management system
+>>>>>>> 2e281862ca4e1fbe8b9394b55306dabe9392b1db
