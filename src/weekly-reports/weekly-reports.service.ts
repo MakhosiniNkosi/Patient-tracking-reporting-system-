@@ -1,4 +1,4 @@
-﻿import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CreateWeeklyReportDto } from './dto';
 import { WeeklyReportStatus, ReportStatus, Prisma } from '@prisma/client';

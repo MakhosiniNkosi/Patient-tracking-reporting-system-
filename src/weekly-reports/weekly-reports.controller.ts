@@ -1,4 +1,4 @@
-﻿import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Res, UseGuards, Request } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Res, UseGuards, Request } from '@nestjs/common';
 import type { Response } from 'express';
 import { WeeklyReportsService } from './weekly-reports.service';
 import { CreateWeeklyReportDto } from './dto';
