@@ -1,4 +1,4 @@
-import { IsEmail, IsString, MinLength, IsOptional } from 'class-validator';
+﻿import { IsEmail, IsString, MinLength, IsOptional } from 'class-validator';
 
 export class LoginDto {
   @IsEmail()
@@ -55,4 +55,34 @@ export class RegisterFirstAdminDto {
 export class AppointAdminDto {
   @IsString()
   userId: string;
+}
+
+// Self-service password change for any logged-in user — requires knowing
+// the current password, unlike the reset flow below which is for when you
+// don't.
+export class ChangePasswordDto {
+  @IsString()
+  currentPassword: string;
+
+  @IsString()
+  @MinLength(8)
+  newPassword: string;
+}
+
+// Public — always returns the same generic response whether or not the
+// email is registered, so this can't be used to enumerate accounts.
+export class ForgotPasswordDto {
+  @IsEmail()
+  email: string;
+}
+
+// Public — the raw token from the emailed link. See
+// AuthService.resetPassword for how it's validated.
+export class ResetPasswordDto {
+  @IsString()
+  token: string;
+
+  @IsString()
+  @MinLength(8)
+  newPassword: string;
 }

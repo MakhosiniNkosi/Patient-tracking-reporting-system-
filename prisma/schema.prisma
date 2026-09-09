@@ -1,4 +1,4 @@
-// Patient Tracking & Reporting System — Prisma schema
+﻿// Patient Tracking & Reporting System — Prisma schema
 // Modeled on the DSD AHF Contribution Monthly Report + Clinicians' Index
 // Testing Referral List forms.
 
@@ -107,8 +107,27 @@ model User {
   facility        Facility?       @relation(fields: [facilityId], references: [id])
   capturedReports MonthlyReport[] @relation("CapturedBy")
   capturedWeeklyReports WeeklyReport[] @relation("WeeklyCapturedBy")
+  passwordResetTokens PasswordResetToken[]
 
   @@map("users")
+}
+
+// A raw, single-use token is emailed to the user (never stored — only its
+// hash is, same principle as a password); the link that email points to
+// carries the raw token, which resetPassword() hashes and looks up here.
+// Storing only the hash means a database leak alone can't be used to reset
+// anyone's password, the same protection bcrypt gives actual passwords.
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("password_reset_tokens")
 }
 
 model MonthlyReport {

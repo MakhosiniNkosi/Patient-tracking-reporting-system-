@@ -1,6 +1,14 @@
-import { Body, Controller, Get, Post, UseGuards, Request } from '@nestjs/common';
+﻿import { Body, Controller, Get, Patch, Post, UseGuards, Request } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { LoginDto, RegisterUserDto, RegisterFirstAdminDto, AppointAdminDto } from './dto';
+import {
+  LoginDto,
+  RegisterUserDto,
+  RegisterFirstAdminDto,
+  AppointAdminDto,
+  ChangePasswordDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
+} from './dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { RolesGuard } from './roles.guard';
 import { Roles } from './roles.decorator';
@@ -46,5 +54,26 @@ export class AuthController {
   @Get('users')
   listUsers() {
     return this.authService.listUsers();
+  }
+
+  // Self-service password change — any logged-in role, not just ADMIN.
+  @UseGuards(JwtAuthGuard)
+  @Patch('change-password')
+  changePassword(@Body() dto: ChangePasswordDto, @Request() req) {
+    return this.authService.changePassword(req.user.id, dto);
+  }
+
+  // Public — sends a reset link if the email matches an account. Always
+  // returns the same message either way; see AuthService.forgotPassword.
+  @Post('forgot-password')
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto);
+  }
+
+  // Public — the counterpart to forgot-password, takes the token from the
+  // emailed link plus a new password.
+  @Post('reset-password')
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
   }
 }

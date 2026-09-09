@@ -1,14 +1,24 @@
-import { Injectable, UnauthorizedException, ConflictException, BadRequestException, NotFoundException } from '@nestjs/common';
+﻿import { Injectable, UnauthorizedException, ConflictException, BadRequestException, NotFoundException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { PrismaService } from '../prisma.service';
-import { LoginDto, RegisterUserDto, RegisterFirstAdminDto } from './dto';
+import { EmailService } from './email.service';
+import {
+  LoginDto,
+  RegisterUserDto,
+  RegisterFirstAdminDto,
+  ChangePasswordDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
+} from './dto';
 
 @Injectable()
 export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwt: JwtService,
+    private email: EmailService,
   ) {}
 
   // Public self-registration — but only ever creates the FIRST admin.
@@ -99,6 +109,63 @@ export class AuthService {
       select: { id: true, name: true, email: true, role: true, facilityId: true },
       orderBy: { name: 'asc' },
     });
+  }
+
+  // Self-service — requires the current password, unlike resetPassword.
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    const valid = await bcrypt.compare(dto.currentPassword, user.passwordHash);
+    if (!valid) throw new UnauthorizedException('Current password is incorrect');
+
+    const passwordHash = await bcrypt.hash(dto.newPassword, 10);
+    await this.prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+    return { message: 'Password changed.' };
+  }
+
+  // Public. Always returns the same generic message whether or not the
+  // email is registered — the alternative (revealing "no account with
+  // that email") turns this endpoint into an account-existence oracle.
+  async forgotPassword(dto: ForgotPasswordDto) {
+    const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    if (user) {
+      // The raw token goes in the email link; only its hash is stored, so
+      // a database leak alone can't be used to reset anyone's password —
+      // same principle as bcrypt for the passwords themselves.
+      const rawToken = crypto.randomBytes(32).toString('hex');
+      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+      await this.prisma.passwordResetToken.create({
+        data: { userId: user.id, tokenHash, expiresAt },
+      });
+
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8080';
+      const resetUrl = `${frontendUrl}/reset-password?token=${rawToken}`;
+      await this.email.sendPasswordResetEmail(user.email, resetUrl);
+    }
+    return { message: 'If that email is registered, a reset link has been sent.' };
+  }
+
+  // Public — the counterpart to forgotPassword. Rejects an expired,
+  // already-used, or unrecognized token with the same generic message,
+  // so this can't be used to probe for which tokens are real either.
+  async resetPassword(dto: ResetPasswordDto) {
+    const tokenHash = crypto.createHash('sha256').update(dto.token).digest('hex');
+    const record = await this.prisma.passwordResetToken.findUnique({ where: { tokenHash } });
+
+    if (!record || record.usedAt || record.expiresAt < new Date()) {
+      throw new BadRequestException('This reset link is invalid or has expired.');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.newPassword, 10);
+    await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id: record.userId }, data: { passwordHash } }),
+      this.prisma.passwordResetToken.update({ where: { id: record.id }, data: { usedAt: new Date() } }),
+    ]);
+
+    return { message: 'Password reset. You can now log in with your new password.' };
   }
 
   private issueToken(sub: string, role: string, facilityId: string | null) {
