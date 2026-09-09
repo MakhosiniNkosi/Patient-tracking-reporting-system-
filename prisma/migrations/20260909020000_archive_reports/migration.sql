@@ -1,4 +1,4 @@
-﻿-- AlterTable
+-- AlterTable
 ALTER TABLE "monthly_reports" ADD COLUMN "archivedAt" TIMESTAMP(3);
 
 -- AlterTable

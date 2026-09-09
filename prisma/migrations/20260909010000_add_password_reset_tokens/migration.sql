@@ -1,4 +1,4 @@
-﻿-- CreateTable
+-- CreateTable
 CREATE TABLE "password_reset_tokens" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
