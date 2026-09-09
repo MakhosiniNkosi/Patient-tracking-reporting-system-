@@ -139,6 +139,9 @@ model MonthlyReport {
   capturedById  String?
   verifiedBy    String?
   verifiedDate  DateTime?
+  archivedAt    DateTime?    // null = active. ADMIN-only soft-hide, distinct from
+                             // deletion — an archived report still exists and can
+                             // be restored, just excluded from the default list.
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
@@ -178,6 +181,7 @@ model WeeklyReport {
   weekLabel    String             // e.g. "Week 1", "06-12 Jul"
   status       WeeklyReportStatus @default(DRAFT)
   capturedById String?
+  archivedAt   DateTime?          // null = active — see MonthlyReport.archivedAt
   lastSyncedAt DateTime?          // set every time this week's values are synced into the monthly report
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt

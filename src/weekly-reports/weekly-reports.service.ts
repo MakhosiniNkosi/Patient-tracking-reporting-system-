@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+﻿import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CreateWeeklyReportDto } from './dto';
 import { WeeklyReportStatus, ReportStatus, Prisma } from '@prisma/client';
@@ -142,12 +142,13 @@ export class WeeklyReportsService {
 
   // Every week across every month, for the "all reports" browsing screen.
   // No entries — the list only needs month/week/status, full detail is
-  // fetched when a specific week is opened.
-  findAllForFacility(facilityId: string, cycleId: string, user: RequestUser) {
+  // fetched when a specific week is opened. Archived weeks are excluded
+  // unless explicitly asked for, same as monthly reports.
+  findAllForFacility(facilityId: string, cycleId: string, user: RequestUser, includeArchived = false) {
     assertFacilityAccess(user, facilityId);
     return this.prisma.weeklyReport.findMany({
-      where: { facilityId, cycleId },
-      select: { id: true, month: true, weekLabel: true, status: true, updatedAt: true },
+      where: { facilityId, cycleId, ...(includeArchived ? {} : { archivedAt: null }) },
+      select: { id: true, month: true, weekLabel: true, status: true, updatedAt: true, archivedAt: true },
       orderBy: { updatedAt: 'desc' },
     });
   }
@@ -158,6 +159,59 @@ export class WeeklyReportsService {
       where: { id },
       data: { status: WeeklyReportStatus.SUBMITTED },
     });
+  }
+
+  // ADMIN-only (enforced at the controller). Soft-hide, reversible — same
+  // idea as MonthlyReportsService.archive. Doesn't touch the monthly
+  // totals this week already synced in; unlike remove below, the
+  // underlying data isn't going anywhere, so there's nothing to reverse.
+  async archive(id: string) {
+    await this.findOne(id);
+    return this.prisma.weeklyReport.update({ where: { id }, data: { archivedAt: new Date() } });
+  }
+
+  async unarchive(id: string) {
+    await this.findOne(id);
+    return this.prisma.weeklyReport.update({ where: { id }, data: { archivedAt: null } });
+  }
+
+  // ADMIN-only (enforced at the controller). Unlike a monthly report's
+  // remove(), this can't just delete and walk away: this week's values are
+  // already folded into the matching MonthlyReport's running totals (see
+  // upsert's delta-sync), so deleting the week without reversing that
+  // contribution would leave the monthly total silently still counting
+  // data that supposedly no longer exists. So this subtracts each entry's
+  // value from the monthly report first, in the same transaction, then
+  // deletes the week (its own entries cascade via the FK).
+  async remove(id: string) {
+    const report = await this.findOne(id);
+
+    await this.prisma.$transaction(async (tx) => {
+      const monthly = await tx.monthlyReport.findUnique({
+        where: {
+          facilityId_cycleId_month: {
+            facilityId: report.facilityId,
+            cycleId: report.cycleId,
+            month: report.month,
+          },
+        },
+      });
+
+      if (monthly) {
+        for (const entry of report.entries) {
+          const amount = Number(entry.value);
+          if (amount === 0) continue;
+          await tx.monthlyReportEntry.updateMany({
+            where: { reportId: monthly.id, indicatorId: entry.indicatorId },
+            data: { value: { decrement: amount } },
+          });
+        }
+      }
+
+      await tx.weeklyReport.delete({ where: { id } });
+    });
+
+    return { message: 'Weekly report deleted and its totals removed from the monthly report.' };
   }
 
   async exportCsv(id: string, user: RequestUser) {

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Res, UseGuards, Request } from '@nestjs/common';
+﻿import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Res, UseGuards, Request } from '@nestjs/common';
 import type { Response } from 'express';
 import { MonthlyReportsService } from './monthly-reports.service';
 import { CreateMonthlyReportDto, VerifyMonthlyReportDto } from './dto';
@@ -44,13 +44,16 @@ export class MonthlyReportsController {
   // All monthly reports for a facility/cycle (every month that has at
   // least been saved once) — what the "all reports" browsing screen lists.
   // Placed before @Get(':id') so "all" is never swallowed as an :id value.
+  // includeArchived=true is the ADMIN-only "show archived" toggle on that
+  // screen; everyone else only ever gets the active-only default.
   @Get('all')
   findAllForFacility(
     @Query('facilityId') facilityId: string,
     @Query('cycleId') cycleId: string,
+    @Query('includeArchived') includeArchived: string,
     @Request() req,
   ) {
-    return this.service.findAllForFacility(facilityId, cycleId, req.user);
+    return this.service.findAllForFacility(facilityId, cycleId, req.user, includeArchived === 'true');
   }
 
   @Get(':id')
@@ -80,6 +83,27 @@ export class MonthlyReportsController {
   @Patch(':id/verify')
   verify(@Param('id') id: string, @Body() dto: VerifyMonthlyReportDto) {
     return this.service.verify(id, dto);
+  }
+
+  // ADMIN-only. Soft-hide, reversible — see MonthlyReportsService.archive.
+  @Roles('ADMIN')
+  @Patch(':id/archive')
+  archive(@Param('id') id: string) {
+    return this.service.archive(id);
+  }
+
+  @Roles('ADMIN')
+  @Patch(':id/unarchive')
+  unarchive(@Param('id') id: string) {
+    return this.service.unarchive(id);
+  }
+
+  // ADMIN-only. Permanent — see MonthlyReportsService.remove for what this
+  // does and doesn't clean up.
+  @Roles('ADMIN')
+  @Delete(':id')
+  remove(@Param('id') id: string) {
+    return this.service.remove(id);
   }
 
   @Get('trend/:facilityId/:cycleId/:indicatorId')

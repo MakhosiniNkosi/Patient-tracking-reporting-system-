@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Res, UseGuards, Request } from '@nestjs/common';
+﻿import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Res, UseGuards, Request } from '@nestjs/common';
 import type { Response } from 'express';
 import { WeeklyReportsService } from './weekly-reports.service';
 import { CreateWeeklyReportDto } from './dto';
@@ -31,14 +31,16 @@ export class WeeklyReportsController {
 
   // Every week across every month for a facility/cycle — what the
   // "all reports" browsing screen lists. Placed before @Get(':id') so
-  // "all" is never swallowed as an :id value.
+  // "all" is never swallowed as an :id value. includeArchived=true is the
+  // ADMIN-only "show archived" toggle on that screen.
   @Get('all')
   findAllForFacility(
     @Query('facilityId') facilityId: string,
     @Query('cycleId') cycleId: string,
+    @Query('includeArchived') includeArchived: string,
     @Request() req,
   ) {
-    return this.service.findAllForFacility(facilityId, cycleId, req.user);
+    return this.service.findAllForFacility(facilityId, cycleId, req.user, includeArchived === 'true');
   }
 
   @Get(':id')
@@ -60,5 +62,26 @@ export class WeeklyReportsController {
   @Patch(':id/submit')
   submit(@Param('id') id: string) {
     return this.service.submit(id);
+  }
+
+  // ADMIN-only. Soft-hide, reversible — see WeeklyReportsService.archive.
+  @Roles('ADMIN')
+  @Patch(':id/archive')
+  archive(@Param('id') id: string) {
+    return this.service.archive(id);
+  }
+
+  @Roles('ADMIN')
+  @Patch(':id/unarchive')
+  unarchive(@Param('id') id: string) {
+    return this.service.unarchive(id);
+  }
+
+  // ADMIN-only. Permanent, and also reverses this week's contribution out
+  // of the matching monthly report's totals — see WeeklyReportsService.remove.
+  @Roles('ADMIN')
+  @Delete(':id')
+  remove(@Param('id') id: string) {
+    return this.service.remove(id);
   }
 }

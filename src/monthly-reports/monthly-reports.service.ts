@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+﻿import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CreateMonthlyReportDto, VerifyMonthlyReportDto } from './dto';
 import { ReportStatus } from '@prisma/client';
@@ -82,11 +82,13 @@ export class MonthlyReportsService {
   // Every month that has at least one saved report, for the "all reports"
   // browsing screen. Doesn't include entries — the list only needs
   // month/status, full detail is fetched when a specific month is opened.
-  findAllForFacility(facilityId: string, cycleId: string, user: RequestUser) {
+  // Archived reports are excluded unless explicitly asked for — they still
+  // exist, they're just hidden from the normal working view.
+  findAllForFacility(facilityId: string, cycleId: string, user: RequestUser, includeArchived = false) {
     assertFacilityAccess(user, facilityId);
     return this.prisma.monthlyReport.findMany({
-      where: { facilityId, cycleId },
-      select: { id: true, month: true, status: true, updatedAt: true },
+      where: { facilityId, cycleId, ...(includeArchived ? {} : { archivedAt: null }) },
+      select: { id: true, month: true, status: true, updatedAt: true, archivedAt: true },
       orderBy: { updatedAt: 'desc' },
     });
   }
@@ -115,6 +117,35 @@ export class MonthlyReportsService {
         verifiedDate: new Date(),
       },
     });
+  }
+
+  // ADMIN-only (enforced at the controller). Soft-hide: the report and its
+  // entries are untouched, it's just excluded from findAllForFacility's
+  // default view. Reversible via unarchive — unlike remove, below.
+  async archive(id: string) {
+    await this.findOne(id); // 404s if it doesn't exist
+    return this.prisma.monthlyReport.update({ where: { id }, data: { archivedAt: new Date() } });
+  }
+
+  async unarchive(id: string) {
+    await this.findOne(id);
+    return this.prisma.monthlyReport.update({ where: { id }, data: { archivedAt: null } });
+  }
+
+  // ADMIN-only (enforced at the controller). Permanent — entries cascade
+  // via the FK's onDelete: Cascade. Deliberately does NOT touch any
+  // WeeklyReports that fed into this month: they have no hard FK to this
+  // record (only a matching facilityId/cycleId/month), so they're
+  // unaffected either way. Worth knowing, though: because the monthly
+  // sync is delta-based (see WeeklyReportsService.upsert), if someone
+  // later edits one of those weeks again, the freshly-recreated monthly
+  // report will only reflect that edit's delta, not the full history this
+  // deleted report used to hold — there's no way to reconstruct the old
+  // rolled-up total from the weeks alone once it's gone.
+  async remove(id: string) {
+    await this.findOne(id);
+    await this.prisma.monthlyReport.delete({ where: { id } });
+    return { message: 'Monthly report deleted.' };
   }
 
   // Trend of one indicator across all months in a cycle, for dashboards
